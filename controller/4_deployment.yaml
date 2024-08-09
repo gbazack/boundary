@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    boundary.org/app: boundary
+    tier: security
+  name: boundary
+  namespace: boundary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: boundary
+      tier: security
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: boundary
+        tier: security
+    spec:
+      initContainers:
+      - name: boundary-init
+        image: hashicorp/boundary:0.17.0
+        args:
+          - "database"
+          - "init"
+          - "-config"
+          - "/boundary/boundary.hcl"
+        env:
+          - name: BOUNDARY_PG_URL
+            value: "postgresql://postgres:postgres@postgres:5432/boundary?sslmode=disable"
+          - name: HOSTNAME
+            value: "boundary"
+        volumeMounts:
+          - mountPath: /boundary
+            name: boundary-config
+            readOnly: true
+      containers:
+      - image: hashicorp/boundary:0.17.0
+        name: boundary
+        args:
+          - "server"
+          - "-config"
+          - "/boundary/boundary.hcl"
+        livenessProbe:
+          httpGet:
+            port: 9200
+            path: "/"
+        readinessProbe:
+          httpGet:
+            port: 9200
+            path: "/"
+        resources:
+          requests:
+            cpu: 250m
+            memory: 250Mi
+          limits:
+            cpu: 2000m
+            memory: 2000Mi
+        env:
+          - name: BOUNDARY_PG_URL
+            value: "postgresql://postgres:postgres@postgres:5432/boundary?sslmode=disable"
+          - name: HOSTNAME
+            value: "boundary"
+        ports:
+          - name: api
+            containerPort: 9200
+          - name: cluster
+            containerPort: 9201
+          - name: data
+            containerPort: 9202
+        volumeMounts:
+          - mountPath: /boundary
+            name: boundary-config
+            readOnly: true
+      volumes:
+        - name: boundary-config
+          configMap:
+            name: boundary-config
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: boundary-controller
+  namespace: boundary
+  labels:
+    app: boundary
+    tier: security    
+spec:
+  selector:
+    app: boundary
+    tier: security
+  ports:
+  - port: 9200
+    targetPort: 9200
+    name: api
+  - port: 9201
+    targetPort: 9201
+    name: cluster
+  - port: 9202
+    targetPort: 9202
+    name: data
+  type: ClusterIP
