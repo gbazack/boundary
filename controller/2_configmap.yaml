@@ -1,6 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: myapp
+  name: boundary-config
+  namespace: boundary
 data:
   boundary.hcl: value
