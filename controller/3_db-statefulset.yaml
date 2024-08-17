@@ -81,7 +81,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres
-  namespace: database
+  namespace: postgres
 spec:
   selector:
     app: postgres

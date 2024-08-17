@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boundary-init-config
+  namespace: boundary
+data:
+  boundary.hcl: |-
+    disable_mlock = true
+    controller {
+      name = "kubernetes-controller"
+      description = "A controller for a kubernetes demo!"
+      database {
+        url = "env://BOUNDARY_PG_URL"
+      }
+      public_cluster_addr = "boundary.boundary-controller.boundary.svc.cluster.local:80"
+    }
+    listener "tcp" {
+      address= "0.0.0.0"
+      purpose = "api"
+      tls_disable = true
+    }
+    listener "tcp" {
+      address = "0.0.0.0"
+      purpose = "cluster"
+      ttls_disable = true
+      }
+    listener "tcp" {
+      address = "0.0.0.0"
+      purpose = "proxy"
+      ttls_disable = true
+    }
+    kms "aead" {
+      purpose = "root"
+      aead_type = "aes-gcm"
+      key = "sP1fnF5Xz85RrXyELHFeZg9Ad2qt4Z4bgNHVGtD6ung="
+      key_id = "global_root"
+    }
+    kms "aead" {
+      purpose = "worker-auth"
+      aead_type = "aes-gcm"
+      key = "8fZBjCUfN0TzjEGLQldGY4+iE9AkOvCfjh7+p0GtRBQ="
+      key_id = "global_worker-auth"
+    }
+    kms "aead" {
+      purpose = "recovery"
+      aead_type = "aes-gcm"
+      key = "8fZBjCUfN0TzjEGLQldGY4+iE9AkOvCfjh7+p0GtRBQ="
+      key_id = "global_recovery"
+    }
+  init-users.sh: |-
+    #!/bin/sh
+    boundary scopes create -name 'Main' -scope-id 'global' -recovery-config /boundary/boundary.hcl -skip-admin-role-creation -skip-default-role-creation
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: boundary-init-users
+  namespace: boundary
+spec:
+  template:
+    spec:
+      containers:
+      - name: boundary-init-users
+        image: hashicorp/boundary:0.17.0
+        command: ["/bin/sh", "-c", "sleep 99d"]
+        env:
+        - name: BOUNDARY_PG_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: db-url
+        - name: BOUNDARY_CONTROLLER_SERVICE_HOST
+          value: "boundary.boundary-controller.boundary.svc.cluster.local"
+        - name: BOUNDARY_CONTROLLER_PORT
+          value: "tcp://boundary.boundary-controller.boundary.svc.cluster.local:9200"
+        - name: BOUNDARY_CONTROLLER_PORT_9200_TCP_ADDR
+          value: "boundary.boundary-controller.boundary.svc.cluster.local"
+        - name: BOUNDARY_CONTROLLER_PORT_9200_TCP
+          value: "tcp://boundary.boundary-controller.boundary.svc.cluster.local:9200"
+        - name: BOUNDARY_CONTROLLER_PORT_9201_TCP_ADDR
+          value: "boundary.boundary-controller.boundary.svc.cluster.local"
+        - name: BOUNDARY_CONTROLLER_PORT_9201_TCP
+          value: "tcp://boundary.boundary-controller.boundary.svc.cluster.local:9201"
+        - name: BOUNDARY_CONTROLLER_PORT_9202_TCP_ADDR
+          value: "boundary.boundary-controller.boundary.svc.cluster.local"
+        - name: BOUNDARY_CONTROLLER_PORT_9202_TCP
+          value: "tcp://boundary.boundary-controller.boundary.svc.cluster.local:9202"
+        volumeMounts:
+        - name: boundary-init-config
+          mountPath: /boundary
+      volumes:
+      - name: boundary-init-config
+        configMap:
+          name: boundary-init-config
+      restartPolicy: Never
+  backoffLimit: 4
+
