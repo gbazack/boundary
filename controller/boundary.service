@@ -1,0 +1,17 @@
+[Unit]
+Description= HashiCorp Boundary Controller Service
+Documentation=https://www.boundaryproject.io/docs
+After=network.target
+
+[Service]
+User=boundary
+Group=boundary
+ExecStart=/usr/bin/boundary server -config /etc/boundary.d/boundary.hcl
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+LimitMEMLOCK=infinity
+Capabilities=CAP_IPC_LOCK+ep
+CapabilityBoundingSet=CAP_SYSLOG CAP_IPC_LOCK
+
+[Install]
+WantedBy=multi-user.target

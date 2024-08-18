@@ -22,6 +22,8 @@ spec:
       hostname: boundary
       subdomain: boundary-controller
       serviceAccountName: boundary-sa
+      imagePullSecrets:
+      - name: pull-secret
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -38,7 +40,7 @@ spec:
         command:
         - /bin/sh
         - -c
-        - boundary database init -config /boundary/boundary.hcl
+        - boundary database init -config /etc/boundary.d/boundary.hcl
         env:
         - name: BOUNDARY_PG_URL
           valueFrom:
@@ -50,11 +52,13 @@ spec:
         - name: BOUNDARY_CONTROLLER_URL
           value: "boundary.boundary-controller.boundary.svc.cluster.local"
         volumeMounts:
-        - mountPath: /boundary
+        - mountPath: /etc/boundary.d/boundary.hcl
+          subPath: boundary.hcl
           name: boundary-config
           readOnly: true
       containers:
-      - image: hashicorp/boundary:0.17.0
+      - image: ghcr.io/gbazack/boundary/controller:0.17.0
+        # image: hashicorp/boundary:0.17.0
         name: boundary
         # lifecycle:
         #   postStart:
@@ -62,15 +66,14 @@ spec:
         #       command:
         #       - /bin/sh
         #       - -c
-        #       - boundary server -config /boundary/boundary.hcl
+        #       - apk add openrc openrc-doc
         command:
-        - /bin/sh
+        - /bin/bash
         - -c
-        - boundary server -config /boundary/boundary.hcl; sleep 3; boundary scopes create -name 'Main' -scope-id 'global' -recovery-config /boundary/boundary.hcl -skip-admin-role-creation -skip-default-role-creation
-        # args:
-        # - "server"
-        # - "-config"
-        # - "/boundary/boundary.hcl"
+        - source /usr/bin/boundary-init.sh; sleep 9d
+        securityContext:
+          allowPrivilegeEscalation: true
+          privileged: true
         livenessProbe:
           httpGet:
             port: 9200
@@ -102,47 +105,25 @@ spec:
         - name: data
           containerPort: 9202
         volumeMounts:
-        - mountPath: /boundary
+        - mountPath: /etc/boundary.d/boundary.hcl
+          subPath: boundary.hcl
           name: boundary-config
+          readOnly: true
+        - mountPath: /usr/bin/boundary-init.sh
+          subPath: boundary-init.sh
+          name: boundary-init-script
           readOnly: true
         - mountPath: /var/log/boundary
           name: boundary-log
           readOnly: false
-      # - image: hashicorp/boundary:0.17.0
-      #   name: boundary-init-users
-      #   command:
-      #   - /bin/sh
-      #   - -c
-      #   - boundary scopes create -name 'Main' -scope-id 'global' -recovery-config /boundary/boundary.hcl -skip-admin-role-creation -skip-default-role-creation
-      #   # readinessProbe:
-      #   #   exec:
-      #   #     command:
-      #   #     - /bin/sh
-      #   #     - -c
-      #   #     - curl
-      #   resources:
-      #     requests:
-      #       cpu: 250m
-      #       memory: 250Mi
-      #     limits:
-      #       cpu: 2000m
-      #       memory: 2000Mi
-      #   env:
-      #   - name: BOUNDARY_PG_URL
-      #     valueFrom:
-      #       secretKeyRef:
-      #         name: postgres-secret
-      #         key: db-url
-      #   - name: HOSTNAME
-      #     value: "boundary"
-      #   volumeMounts:
-      #   - mountPath: /boundary
-      #     name: boundary-config
-      #     readOnly: true
       volumes:
       - name: boundary-config
         configMap:
           name: boundary-config
+      - name: boundary-init-script
+        configMap:
+          name: boundary-init-script
+          defaultMode: 0777
       - name: boundary-log
         persistentVolumeClaim:
           claimName: boundary-log-pvc

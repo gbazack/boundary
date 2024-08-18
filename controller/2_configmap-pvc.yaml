@@ -15,18 +15,14 @@ data:
       public_cluster_addr = "boundary.boundary-controller.boundary.svc.cluster.local"
     }
     listener "tcp" {
-      address= "0.0.0.0"
+      address = "0.0.0.0:9200"
       purpose = "api"
       tls_disable = true
+      cors_enabled = false
     }
     listener "tcp" {
-      address = "0.0.0.0"
+      address = "0.0.0.0:9201"
       purpose = "cluster"
-      ttls_disable = true
-      }
-    listener "tcp" {
-      address = "0.0.0.0"
-      purpose = "proxy"
       ttls_disable = true
     }
     kms "aead" {
@@ -74,6 +70,18 @@ data:
         }
       }
     }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boundary-init-script
+  namespace: boundary
+data:
+  boundary-init.sh: |-
+    #!/bin/bash
+    systemctl start boundary.service;
+    sleep 5s;
+    boundary scopes create -name 'Main' -scope-id 'global' -recovery-config /etc/boundary.d/boundary.hcl -skip-admin-role-creation -skip-default-role-creation
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
