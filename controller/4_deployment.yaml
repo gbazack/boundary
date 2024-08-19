@@ -71,9 +71,6 @@ spec:
         - /bin/bash
         - -c
         - source /usr/bin/boundary-init.sh; sleep 9d
-        securityContext:
-          allowPrivilegeEscalation: true
-          privileged: true
         livenessProbe:
           httpGet:
             port: 9200

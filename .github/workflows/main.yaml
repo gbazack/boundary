@@ -3,12 +3,14 @@ name: Publish Docker Image
 on:
   push:
     branches: ["*"]
+    tags: ["*"]
   release:
     types:
     - published
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/controller
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   build-push-image:
@@ -38,11 +40,17 @@ jobs:
 
     - name: Build the Docker image
       id: push
-      run: docker build . --file controller/Dockerfile --tag ghcr.io/gbazack/boundary/controller:$(date +%s) && docke push ghcr.io/gbazack/boundary/controller:$(date +%s)
+      run: docker build . --file controller/Dockerfile --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$GITHUB_REF_NAME && docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$GITHUB_REF_NAME
 
-    - name: Generate artifact attestation
-      uses: actions/attest-build-provenance@v1
+    - name: Create release
+      id: release
+      uses: actions/create-release@v1
       with:
-        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
-        subject-digest: ${{ steps.push.outputs.digest }}
-        push-to-registry: true
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          Changes in the Release
+          - Add custom boundary Docker image
+          - Add script to initialize scopes, org, users, etc.
+        draft: false
+        prerelease: false

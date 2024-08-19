@@ -80,8 +80,8 @@ data:
   boundary-init.sh: |-
     #!/bin/bash
     systemctl start boundary.service;
-    sleep 5s;
-    boundary scopes create -name 'Main' -scope-id 'global' -recovery-config /etc/boundary.d/boundary.hcl -skip-admin-role-creation -skip-default-role-creation
+    sleep 90s;
+    boundary scopes create -name='Main' -scope-id='global' -recovery-config /etc/boundary.d/boundary.hcl -skip-admin-role-creation -skip-default-role-creation
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
