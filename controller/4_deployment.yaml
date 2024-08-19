@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    boundary.org/app: boundary
+    tier: security
+  name: boundary
+  namespace: boundary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: boundary
+      tier: security
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: boundary
+        tier: security
+    spec:
+      hostname: boundary
+      subdomain: boundary-controller
+      serviceAccountName: boundary-sa
+      imagePullSecrets:
+      - name: pull-secret
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchExpressions:
+              - key: tier
+                operator: In
+                values:
+                - database
+      initContainers:
+      - name: boundary-init
+        image: hashicorp/boundary:0.17.0
+        command:
+        - /bin/sh
+        - -c
+        - boundary database init -config /etc/boundary.d/boundary.hcl
+        env:
+        - name: BOUNDARY_PG_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: db-url
+        - name: HOSTNAME
+          value: "boundary"
+        - name: BOUNDARY_CONTROLLER_URL
+          value: "boundary.boundary-controller.boundary.svc.cluster.local"
+        volumeMounts:
+        - mountPath: /etc/boundary.d/boundary.hcl
+          subPath: boundary.hcl
+          name: boundary-config
+          readOnly: true
+      containers:
+      - image: ghcr.io/gbazack/boundary/controller:0.17.0
+        # image: hashicorp/boundary:0.17.0
+        name: boundary
+        # lifecycle:
+        #   postStart:
+        #     exec:
+        #       command:
+        #       - /bin/sh
+        #       - -c
+        #       - apk add openrc openrc-doc
+        command:
+        - /bin/bash
+        - -c
+        - source /usr/bin/boundary-init.sh; sleep 9d
+        livenessProbe:
+          httpGet:
+            port: 9200
+            path: "/"
+        readinessProbe:
+          httpGet:
+            port: 9200
+            path: "/"
+        resources:
+          requests:
+            cpu: 250m
+            memory: 250Mi
+          limits:
+            cpu: 2000m
+            memory: 2000Mi
+        env:
+        - name: BOUNDARY_PG_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: db-url
+        - name: HOSTNAME
+          value: "boundary"
+        ports:
+        - name: api
+          containerPort: 9200
+        - name: cluster
+          containerPort: 9201
+        - name: data
+          containerPort: 9202
+        volumeMounts:
+        - mountPath: /etc/boundary.d/boundary.hcl
+          subPath: boundary.hcl
+          name: boundary-config
+          readOnly: true
+        - mountPath: /usr/bin/boundary-init.sh
+          subPath: boundary-init.sh
+          name: boundary-init-script
+          readOnly: true
+        - mountPath: /var/log/boundary
+          name: boundary-log
+          readOnly: false
+      volumes:
+      - name: boundary-config
+        configMap:
+          name: boundary-config
+      - name: boundary-init-script
+        configMap:
+          name: boundary-init-script
+          defaultMode: 0777
+      - name: boundary-log
+        persistentVolumeClaim:
+          claimName: boundary-log-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: boundary-controller
+  namespace: boundary
+  labels:
+    app: boundary
+    tier: security
+spec:
+  selector:
+    app: boundary
+    tier: security
+  ports:
+  - port: 9200
+    targetPort: 9200
+    name: api
+  - port: 9201
+    targetPort: 9201
+    name: cluster
+  - port: 9202
+    targetPort: 9202
+    name: data
+  type: ClusterIP

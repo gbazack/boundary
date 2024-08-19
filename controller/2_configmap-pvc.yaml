@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boundary-config
+  namespace: boundary
+data:
+  boundary.hcl: |-
+    disable_mlock = true
+    controller {
+      name = "kubernetes-controller"
+      description = "A controller for a kubernetes demo!"
+      database {
+        url = "env://BOUNDARY_PG_URL"
+      }
+      public_cluster_addr = "boundary.boundary-controller.boundary.svc.cluster.local"
+    }
+    listener "tcp" {
+      address = "0.0.0.0:9200"
+      purpose = "api"
+      tls_disable = true
+      cors_enabled = false
+    }
+    listener "tcp" {
+      address = "0.0.0.0:9201"
+      purpose = "cluster"
+      ttls_disable = true
+    }
+    kms "aead" {
+      purpose = "root"
+      aead_type = "aes-gcm"
+      key = "sP1fnF5Xz85RrXyELHFeZg9Ad2qt4Z4bgNHVGtD6ung="
+      key_id = "global_root"
+    }
+    kms "aead" {
+      purpose = "worker-auth"
+      aead_type = "aes-gcm"
+      key = "8fZBjCUfN0TzjEGLQldGY4+iE9AkOvCfjh7+p0GtRBQ="
+      key_id = "global_worker-auth"
+    }
+    kms "aead" {
+      purpose = "recovery"
+      aead_type = "aes-gcm"
+      key = "8fZBjCUfN0TzjEGLQldGY4+iE9AkOvCfjh7+p0GtRBQ="
+      key_id = "global_recovery"
+    }
+    events {
+      audit_enabled       = true
+      sysevents_enabled   = true
+      observations_enable = true
+      sink "stderr" {
+        name = "all-events"
+        description = "All events sent to stderr"
+        event_types = ["*"]
+        format = "cloudevents-json"
+      }
+      sink {
+        name = "file-sink"
+        description = "All events sent to a file"
+        event_types = ["*"]
+        format = "cloudevents-json"
+        file {
+          path = "/var/log/boundary"
+          file_name = "controller.log"
+        }
+        audit_config {
+          audit_filter_overrides {
+            sensitive = "redact"
+            secret    = "redact"
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boundary-init-script
+  namespace: boundary
+data:
+  boundary-init.sh: |-
+    #!/bin/bash
+    systemctl start boundary.service;
+    sleep 90s;
+    boundary scopes create -name='Main' -scope-id='global' -recovery-config /etc/boundary.d/boundary.hcl -skip-admin-role-creation -skip-default-role-creation
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: boundary-log-pvc
+  namespace: boundary
+spec:
+  accessModes:
+  - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
